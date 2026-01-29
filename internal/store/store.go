@@ -134,6 +134,8 @@ type ListFilter struct {
 	Limit      int
 	Provider   string
 	StatusCode *int
+	From       *time.Time // Inclusive start date
+	To         *time.Time // Inclusive end date
 }
 
 func (s *Store) ListSummaries(ctx context.Context, f ListFilter) ([]WebhookSummary, error) {
@@ -152,6 +154,14 @@ func (s *Store) ListSummaries(ctx context.Context, f ListFilter) ([]WebhookSumma
 	if f.StatusCode != nil {
 		wheres = append(wheres, "status_code = ?")
 		args = append(args, *f.StatusCode)
+	}
+	if f.From != nil {
+		wheres = append(wheres, "created_at >= ?")
+		args = append(args, f.From.UnixMilli())
+	}
+	if f.To != nil {
+		wheres = append(wheres, "created_at <= ?")
+		args = append(args, f.To.UnixMilli())
 	}
 	whereSQL := ""
 	if len(wheres) > 0 {

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestInsertAndGet(t *testing.T) {
@@ -85,6 +86,112 @@ func TestListAndSearch(t *testing.T) {
 }
 
 func ptr(v int) *int { return &v }
+
+func TestListSummaries_DateRangeFilter(t *testing.T) {
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	// Insert webhooks at different timestamps
+	_ = s.InsertWebhook(ctx, InsertParams{
+		ID:        "jan15",
+		CreatedAt: time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC).UnixMilli(),
+		Method:    "POST",
+		Path:      "/a",
+		Headers:   map[string][]string{"Content-Type": {"application/json"}},
+		Body:      []byte(`{}`),
+		BodyText:  `{}`,
+	})
+	_ = s.InsertWebhook(ctx, InsertParams{
+		ID:        "jan20",
+		CreatedAt: time.Date(2024, 1, 20, 12, 0, 0, 0, time.UTC).UnixMilli(),
+		Method:    "POST",
+		Path:      "/b",
+		Headers:   map[string][]string{"Content-Type": {"application/json"}},
+		Body:      []byte(`{}`),
+		BodyText:  `{}`,
+	})
+	_ = s.InsertWebhook(ctx, InsertParams{
+		ID:        "jan25",
+		CreatedAt: time.Date(2024, 1, 25, 12, 0, 0, 0, time.UTC).UnixMilli(),
+		Method:    "POST",
+		Path:      "/c",
+		Headers:   map[string][]string{"Content-Type": {"application/json"}},
+		Body:      []byte(`{}`),
+		BodyText:  `{}`,
+	})
+	_ = s.InsertWebhook(ctx, InsertParams{
+		ID:        "feb01",
+		CreatedAt: time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC).UnixMilli(),
+		Method:    "POST",
+		Path:      "/d",
+		Headers:   map[string][]string{"Content-Type": {"application/json"}},
+		Body:      []byte(`{}`),
+		BodyText:  `{}`,
+	})
+
+	// Test: filter from Jan 18 to Jan 30 (should get jan20 and jan25)
+	from := time.Date(2024, 1, 18, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2024, 1, 30, 23, 59, 59, 0, time.UTC)
+	rows, err := s.ListSummaries(ctx, ListFilter{
+		Limit: 10,
+		From:  &from,
+		To:    &to,
+	})
+	if err != nil {
+		t.Fatalf("ListSummaries with date range: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d: %+v", len(rows), rows)
+	}
+	if rows[0].ID != "jan25" || rows[1].ID != "jan20" {
+		t.Fatalf("unexpected row order: %+v", rows)
+	}
+
+	// Test: only From filter (should get jan20, jan25, feb01)
+	from = time.Date(2024, 1, 18, 0, 0, 0, 0, time.UTC)
+	rows, err = s.ListSummaries(ctx, ListFilter{
+		Limit: 10,
+		From:  &from,
+	})
+	if err != nil {
+		t.Fatalf("ListSummaries with From only: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+
+	// Test: only To filter (should get jan15, jan20, jan25)
+	to = time.Date(2024, 1, 30, 23, 59, 59, 0, time.UTC)
+	rows, err = s.ListSummaries(ctx, ListFilter{
+		Limit: 10,
+		To:    &to,
+	})
+	if err != nil {
+		t.Fatalf("ListSummaries with To only: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+
+	// Test: combined with other filters
+	from = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	to = time.Date(2024, 1, 31, 23, 59, 59, 0, time.UTC)
+	rows, err = s.ListSummaries(ctx, ListFilter{
+		Limit: 10,
+		From:  &from,
+		To:    &to,
+	})
+	if err != nil {
+		t.Fatalf("ListSummaries with date range: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows for Jan, got %d", len(rows))
+	}
+}
 
 func TestDeleteWebhook(t *testing.T) {
 	s, err := Open(":memory:")

@@ -133,4 +133,3 @@ func looksLikeJSON(b []byte) bool {
 	b = bytes.TrimSpace(b)
 	return len(b) > 0 && (b[0] == '{' || b[0] == '[')
 }
-

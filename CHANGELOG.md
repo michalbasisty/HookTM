@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `list` command now supports `--from` and `--to` flags for date range filtering
+  - Supports ISO 8601 format: `2024-01-15T10:30:00Z`
+  - Supports date only: `2024-01-15` (uses start/end of day)
+  - Supports relative duration: `1d`, `7d`, `1h` (e.g., `hooktm list --from 7d`)
 - `delete` command to delete webhooks by ID or filter (--older-than, --provider, --status)
 - Initial release of HookTM
 - HTTP proxy for capturing webhooks

@@ -37,7 +37,7 @@
 - [ ] Shell completions (bash, zsh, fish)
 - [ ] Homebrew formula
 - [x] Delete command (cleanup old webhooks)
-- [ ] Webhook filtering by date range
+- [x] Webhook filtering by date range
 
 **Ship: v0.2.0** — *"Production ready for daily use"*
 

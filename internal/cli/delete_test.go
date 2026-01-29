@@ -7,9 +7,9 @@ import (
 
 func TestParseDuration(t *testing.T) {
 	tests := []struct {
-		input    string
-		want     time.Duration
-		wantErr  bool
+		input   string
+		want    time.Duration
+		wantErr bool
 	}{
 		{"1h", time.Hour, false},
 		{"24h", 24 * time.Hour, false},

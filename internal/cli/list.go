@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,8 @@ func newListCmd() *cli.Command {
 			&cli.StringFlag{Name: "provider", Usage: "Filter by provider"},
 			&cli.IntFlag{Name: "status", Usage: "Filter by response status code"},
 			&cli.StringFlag{Name: "search", Usage: "FTS search query (body text)"},
+			&cli.StringFlag{Name: "from", Usage: "Filter from date/time (ISO 8601, YYYY-MM-DD, or relative like 1d, 7d)"},
+			&cli.StringFlag{Name: "to", Usage: "Filter to date/time (ISO 8601, YYYY-MM-DD, or relative like 1d, 7d)"},
 			&cli.BoolFlag{Name: "json", Usage: "Output as JSON"},
 		},
 		Action: func(c *cli.Context) error {
@@ -36,6 +39,20 @@ func newListCmd() *cli.Command {
 			}
 			if c.IsSet("status") {
 				f.StatusCode = ptrInt(c.Int("status"))
+			}
+			if c.IsSet("from") {
+				t, err := parseTime(c.String("from"), true)
+				if err != nil {
+					return fmt.Errorf("invalid --from: %w", err)
+				}
+				f.From = t
+			}
+			if c.IsSet("to") {
+				t, err := parseTime(c.String("to"), false)
+				if err != nil {
+					return fmt.Errorf("invalid --to: %w", err)
+				}
+				f.To = t
 			}
 			search := strings.TrimSpace(c.String("search"))
 
@@ -74,3 +91,73 @@ func newListCmd() *cli.Command {
 }
 
 func ptrInt(v int) *int { return &v }
+
+// parseTime parses a time string. It supports:
+// - ISO 8601 format: 2024-01-15T10:30:00Z
+// - Date only: 2024-01-15 (interprets as start of day for from, end of day for to)
+// - Relative duration: 1d, 7d, 1h (relative to now)
+func parseTime(s string, isFrom bool) (*time.Time, error) {
+	return parseTimeWithReference(s, isFrom, time.Now())
+}
+
+// parseTimeWithReference parses a time string relative to a reference time (for testing).
+func parseTimeWithReference(s string, isFrom bool, ref time.Time) (*time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, fmt.Errorf("empty time string")
+	}
+
+	// Try relative duration first (ends with d, h, m, s)
+	if isRelativeDuration(s) {
+		d, err := parseDuration(s)
+		if err != nil {
+			return nil, err
+		}
+		t := ref.Add(-d)
+		return &t, nil
+	}
+
+	// Try ISO 8601 formats
+	formats := []string{
+		time.RFC3339,           // 2006-01-02T15:04:05Z07:00
+		"2006-01-02T15:04:05Z", // 2006-01-02T15:04:05Z
+		"2006-01-02 15:04:05",  // 2006-01-02 15:04:05
+		"2006-01-02",           // Date only
+	}
+
+	for _, format := range formats {
+		if t, err := time.ParseInLocation(format, s, time.Local); err == nil {
+			// For date-only format, adjust to start/end of day
+			if format == "2006-01-02" {
+				if isFrom {
+					// Start of day in UTC
+					t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+				} else {
+					// End of day in UTC
+					t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, time.UTC)
+				}
+			}
+			return &t, nil
+		}
+	}
+
+	return nil, fmt.Errorf("unable to parse time: %q (supported: ISO 8601, YYYY-MM-DD, or relative like 1d, 7d)", s)
+}
+
+// isRelativeDuration checks if the string looks like a relative duration.
+func isRelativeDuration(s string) bool {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if len(s) < 2 {
+		return false
+	}
+	last := s[len(s)-1]
+	if last != 'd' && last != 'h' && last != 'm' && last != 's' {
+		return false
+	}
+	// Check that the prefix is numeric
+	prefix := s[:len(s)-1]
+	if _, err := strconv.Atoi(prefix); err != nil {
+		return false
+	}
+	return true
+}

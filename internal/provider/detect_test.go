@@ -36,3 +36,30 @@ func TestDetect_GitHub(t *testing.T) {
 		t.Fatalf("sig=%q", sig)
 	}
 }
+
+func TestDetect_Unknown(t *testing.T) {
+	h := http.Header{}
+	h.Set("X-Slack-Signature", "v0=abc123")
+	prov, ev, sig := Detect(h, []byte(`{}`))
+	if prov != "unknown" {
+		t.Fatalf("prov=%q, want unknown", prov)
+	}
+	if ev != "" {
+		t.Fatalf("ev=%q, want empty", ev)
+	}
+	if sig != "v0=abc123" {
+		t.Fatalf("sig=%q, want v0=abc123", sig)
+	}
+}
+
+func TestDetect_Shopify(t *testing.T) {
+	h := http.Header{}
+	h.Set("X-Shopify-Hmac-SHA256", "abc123")
+	prov, _, sig := Detect(h, []byte(`{}`))
+	if prov != "unknown" {
+		t.Fatalf("prov=%q, want unknown (shopify not yet implemented)", prov)
+	}
+	if sig != "abc123" {
+		t.Fatalf("sig=%q", sig)
+	}
+}

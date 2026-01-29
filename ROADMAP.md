@@ -33,7 +33,7 @@
   - [ ] Mailgun
   - [ ] PagerDuty
 - [ ] Export to Postman/Insomnia collections
-- [ ] CI mode (`hooktm replay --ci` with exit codes)
+- [x] CI mode (`hooktm replay --ci` with exit codes)
 - [ ] Shell completions (bash, zsh, fish)
 - [ ] Homebrew formula
 - [x] Delete command (cleanup old webhooks)

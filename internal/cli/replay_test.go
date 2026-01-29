@@ -1,106 +1,115 @@
 package cli
 
 import (
+	"fmt"
+	"net"
+	"syscall"
 	"testing"
 )
 
-func TestGetExitCode(t *testing.T) {
+func TestGetExitCodeFromStatus(t *testing.T) {
 	tests := []struct {
 		name       string
-		hasError   bool
-		errType    string
 		statusCode int
 		want       int
 	}{
-		{
-			name:       "success - 200 OK",
-			hasError:   false,
-			statusCode: 200,
-			want:       0,
-		},
-		{
-			name:       "success - 201 Created",
-			hasError:   false,
-			statusCode: 201,
-			want:       0,
-		},
-		{
-			name:       "HTTP error - 400 Bad Request",
-			hasError:   false,
-			statusCode: 400,
-			want:       2,
-		},
-		{
-			name:       "HTTP error - 500 Internal Server Error",
-			hasError:   false,
-			statusCode: 500,
-			want:       2,
-		},
-		{
-			name:       "HTTP error - 404 Not Found",
-			hasError:   false,
-			statusCode: 404,
-			want:       2,
-		},
-		{
-			name:     "connection error",
-			hasError: true,
-			errType:  "connection",
-			want:     1,
-		},
-		{
-			name:     "not found error",
-			hasError: true,
-			errType:  "notfound",
-			want:     3,
-		},
-		{
-			name:     "other error",
-			hasError: true,
-			errType:  "other",
-			want:     3,
-		},
+		{"success 200", 200, 0},
+		{"success 201", 201, 0},
+		{"success 204", 204, 0},
+		{"redirect 301", 301, 3},
+		{"client error 400", 400, 2},
+		{"client error 404", 404, 2},
+		{"server error 500", 500, 2},
+		{"server error 503", 503, 2},
+		{"unknown 0", 0, 3},
+		{"unknown 600", 600, 3},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var got int
-			if tt.hasError {
-				var err error
-				switch tt.errType {
-				case "connection":
-					err = &connectionError{msg: "connection refused"}
-				case "notfound":
-					err = &notFoundError{msg: "webhook not found"}
-				default:
-					err = &genericError{msg: "some error"}
-				}
-				got = getExitCodeFromError(err)
-			} else {
-				got = getExitCodeFromStatus(tt.statusCode)
-			}
+			got := getExitCodeFromStatus(tt.statusCode)
 			if got != tt.want {
-				t.Errorf("getExitCode() = %d, want %d", got, tt.want)
+				t.Errorf("getExitCodeFromStatus(%d) = %d, want %d", tt.statusCode, got, tt.want)
 			}
 		})
 	}
 }
 
-// Test error types
-type connectionError struct {
-	msg string
+func TestGetExitCodeFromError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: 0,
+		},
+		{
+			name: "not found error",
+			err:  fmt.Errorf("not found: abc123"),
+			want: 3,
+		},
+		{
+			name: "connection refused",
+			err:  syscall.ECONNREFUSED,
+			want: 1,
+		},
+		{
+			name: "connection reset",
+			err:  syscall.ECONNRESET,
+			want: 1,
+		},
+		{
+			name: "network unreachable",
+			err:  syscall.ENETUNREACH,
+			want: 1,
+		},
+		{
+			name: "generic error",
+			err:  fmt.Errorf("something went wrong"),
+			want: 3,
+		},
+		{
+			name: "invalid input error",
+			err:  fmt.Errorf("missing id"),
+			want: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getExitCodeFromError(tt.err)
+			if got != tt.want {
+				t.Errorf("getExitCodeFromError(%v) = %d, want %d", tt.err, got, tt.want)
+			}
+		})
+	}
 }
 
-func (e *connectionError) Error() string { return e.msg }
+func TestGetExitCodeFromError_Network(t *testing.T) {
+	// Test with net.Error
+	netErr := &testNetError{timeout: true}
+	got := getExitCodeFromError(netErr)
+	if got != 1 {
+		t.Errorf("getExitCodeFromError(net.Error timeout) = %d, want 1", got)
+	}
 
-type notFoundError struct {
-	msg string
+	// Test with DNS error
+	dnsErr := &net.DNSError{Err: "no such host", Name: "example.com"}
+	got = getExitCodeFromError(dnsErr)
+	if got != 1 {
+		t.Errorf("getExitCodeFromError(DNSError) = %d, want 1", got)
+	}
 }
 
-func (e *notFoundError) Error() string { return e.msg }
-
-type genericError struct {
-	msg string
+// testNetError implements net.Error for testing
+type testNetError struct {
+	timeout   bool
+	temporary bool
 }
 
-func (e *genericError) Error() string { return e.msg }
+func (e *testNetError) Error() string   { return "test network error" }
+func (e *testNetError) Timeout() bool   { return e.timeout }
+func (e *testNetError) Temporary() bool { return e.temporary }

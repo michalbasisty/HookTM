@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// openStoreFromContext opens the database from CLI context.
 func openStoreFromContext(c *cli.Context) (*store.Store, *config.Config, error) {
 	cfgPath := c.String("config")
 	cfg, err := config.Load(cfgPath)
@@ -36,7 +37,6 @@ func openStoreFromContext(c *cli.Context) (*store.Store, *config.Config, error) 
 func defaultDBPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		// Fall back to cwd.
 		return "hooks.db"
 	}
 	return filepath.Join(home, ".hooktm", "hooks.db")

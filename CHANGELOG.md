@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `replay` command now supports `--ci` flag for CI/automation mode
+  - Exit code 0: Success (2xx response)
+  - Exit code 1: Connection error (network/DNS/timeout)
+  - Exit code 2: HTTP error (4xx/5xx response)
+  - Exit code 3: Other error (not found, invalid input, etc.)
 - `list` command now supports `--from` and `--to` flags for date range filtering
   - Supports ISO 8601 format: `2024-01-15T10:30:00Z`
   - Supports date only: `2024-01-15` (uses start/end of day)

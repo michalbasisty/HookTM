@@ -6,37 +6,34 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// NewApp creates the CLI application with all commands.
 func NewApp() *cli.App {
 	app := &cli.App{
-		Name:  "hooktm",
-		Usage: "Local-first webhook development companion",
+		Name:    "hooktm",
+		Usage:   "Capture, inspect, and replay webhooks",
+		Version: "0.2.0",
 		Commands: []*cli.Command{
 			newListenCmd(),
 			newListCmd(),
 			newShowCmd(),
 			newReplayCmd(),
-			newUICmd(),
 			newCodegenCmd(),
 			newDeleteCmd(),
+			newUICmd(),
 		},
 	}
 
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
 			Name:    "db",
-			Usage:   "Path to SQLite database",
+			Usage:   "Database file path",
 			EnvVars: []string{"HOOKTM_DB"},
 		},
 		&cli.StringFlag{
 			Name:    "config",
-			Usage:   "Path to config file (optional)",
+			Usage:   "Config file path",
 			EnvVars: []string{"HOOKTM_CONFIG"},
 		},
-	}
-
-	app.Before = func(c *cli.Context) error {
-		// Validation here later if needed.
-		return nil
 	}
 
 	app.CommandNotFound = func(c *cli.Context, command string) {

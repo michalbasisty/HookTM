@@ -9,15 +9,24 @@ import (
 func newUICmd() *cli.Command {
 	return &cli.Command{
 		Name:  "ui",
-		Usage: "Interactive TUI",
-		Action: func(c *cli.Context) error {
-			s, cfg, err := openStoreFromContext(c)
-			if err != nil {
-				return err
-			}
-			defer s.Close()
+		Usage: "Open interactive UI",
+		Description: `Launch the interactive terminal UI for browsing webhooks.
 
-			return tui.Run(c.Context, s, cfg.Forward)
-		},
+Navigation:
+  ↑/↓ or j/k    Move up/down
+  Enter         View details
+  /             Search
+  q             Quit`,
+		Action: runUI,
 	}
+}
+
+func runUI(c *cli.Context) error {
+	s, cfg, err := openStoreFromContext(c)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	return tui.Run(c.Context, s, cfg.Forward)
 }

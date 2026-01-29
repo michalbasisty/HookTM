@@ -17,6 +17,7 @@ func NewApp() *cli.App {
 			newReplayCmd(),
 			newUICmd(),
 			newCodegenCmd(),
+			newDeleteCmd(),
 		},
 	}
 

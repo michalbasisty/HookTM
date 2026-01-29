@@ -85,3 +85,125 @@ func TestListAndSearch(t *testing.T) {
 }
 
 func ptr(v int) *int { return &v }
+
+func TestDeleteWebhook(t *testing.T) {
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	_ = s.InsertWebhook(ctx, InsertParams{
+		ID:        "del1",
+		CreatedAt: 1,
+		Method:    "POST",
+		Path:      "/a",
+		Headers:   map[string][]string{"Content-Type": {"application/json"}},
+		Body:      []byte(`{}`),
+		BodyText:  `{}`,
+	})
+	_ = s.InsertWebhook(ctx, InsertParams{
+		ID:        "del2",
+		CreatedAt: 2,
+		Method:    "POST",
+		Path:      "/b",
+		Headers:   map[string][]string{"Content-Type": {"application/json"}},
+		Body:      []byte(`{}`),
+		BodyText:  `{}`,
+	})
+
+	// Delete by ID
+	if err := s.DeleteWebhook(ctx, "del1"); err != nil {
+		t.Fatalf("DeleteWebhook: %v", err)
+	}
+
+	// Verify deleted
+	_, err = s.GetWebhook(ctx, "del1")
+	if err == nil {
+		t.Fatal("expected error for deleted webhook")
+	}
+
+	// Verify other still exists
+	wh, err := s.GetWebhook(ctx, "del2")
+	if err != nil {
+		t.Fatalf("GetWebhook: %v", err)
+	}
+	if wh.ID != "del2" {
+		t.Fatalf("unexpected webhook: %+v", wh)
+	}
+
+	// Delete non-existent should error
+	if err := s.DeleteWebhook(ctx, "notfound"); err == nil {
+		t.Fatal("expected error for non-existent webhook")
+	}
+}
+
+func TestDeleteByFilter(t *testing.T) {
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+
+	now := 1000000000000
+	_ = s.InsertWebhook(ctx, InsertParams{
+		ID:         "old1",
+		CreatedAt:  int64(now - 86400000*10), // 10 days old
+		Method:     "POST",
+		Path:       "/a",
+		Headers:    map[string][]string{"Content-Type": {"application/json"}},
+		Body:       []byte(`{}`),
+		BodyText:   `{}`,
+		Provider:   "stripe",
+		StatusCode: ptr(500),
+	})
+	_ = s.InsertWebhook(ctx, InsertParams{
+		ID:         "old2",
+		CreatedAt:  int64(now - 86400000*5), // 5 days old
+		Method:     "POST",
+		Path:       "/b",
+		Headers:    map[string][]string{"Content-Type": {"application/json"}},
+		Body:       []byte(`{}`),
+		BodyText:   `{}`,
+		Provider:   "github",
+		StatusCode: ptr(200),
+	})
+	_ = s.InsertWebhook(ctx, InsertParams{
+		ID:         "new1",
+		CreatedAt:  int64(now),
+		Method:     "POST",
+		Path:       "/c",
+		Headers:    map[string][]string{"Content-Type": {"application/json"}},
+		Body:       []byte(`{}`),
+		BodyText:   `{}`,
+		Provider:   "stripe",
+		StatusCode: ptr(200),
+	})
+
+	// Delete by provider
+	n, err := s.DeleteByFilter(ctx, DeleteFilter{Provider: "stripe"})
+	if err != nil {
+		t.Fatalf("DeleteByFilter: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("expected 2 deleted, got %d", n)
+	}
+
+	// Delete by status
+	status := 200
+	n, err = s.DeleteByFilter(ctx, DeleteFilter{StatusCode: &status})
+	if err != nil {
+		t.Fatalf("DeleteByFilter: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 deleted, got %d", n)
+	}
+
+	// Empty filter should error
+	_, err = s.DeleteByFilter(ctx, DeleteFilter{})
+	if err == nil {
+		t.Fatal("expected error for empty filter")
+	}
+}

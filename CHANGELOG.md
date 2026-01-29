@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `delete` command to delete webhooks by ID or filter (--older-than, --provider, --status)
 - Initial release of HookTM
 - HTTP proxy for capturing webhooks
 - SQLite storage with WAL mode

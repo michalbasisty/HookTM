@@ -272,6 +272,57 @@ LIMIT ?
 	return out, rows.Err()
 }
 
+func (s *Store) DeleteWebhook(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("empty id")
+	}
+	res, err := s.db.ExecContext(ctx, `DELETE FROM webhooks WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("not found: %s", id)
+	}
+	return nil
+}
+
+type DeleteFilter struct {
+	OlderThan  time.Duration
+	Provider   string
+	StatusCode *int
+}
+
+func (s *Store) DeleteByFilter(ctx context.Context, f DeleteFilter) (int64, error) {
+	var (
+		wheres []string
+		args   []any
+	)
+	if f.OlderThan > 0 {
+		cutoff := time.Now().Add(-f.OlderThan).UnixMilli()
+		wheres = append(wheres, "created_at < ?")
+		args = append(args, cutoff)
+	}
+	if strings.TrimSpace(f.Provider) != "" {
+		wheres = append(wheres, "provider = ?")
+		args = append(args, f.Provider)
+	}
+	if f.StatusCode != nil {
+		wheres = append(wheres, "status_code = ?")
+		args = append(args, *f.StatusCode)
+	}
+	if len(wheres) == 0 {
+		return 0, fmt.Errorf("at least one filter required for bulk delete")
+	}
+	whereSQL := "WHERE " + strings.Join(wheres, " AND ")
+	res, err := s.db.ExecContext(ctx, `DELETE FROM webhooks `+whereSQL, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func ensureDir(path string) error {
 	if path == "." || path == "" {
 		return nil

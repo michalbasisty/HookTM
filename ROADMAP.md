@@ -36,7 +36,7 @@
 - [ ] CI mode (`hooktm replay --ci` with exit codes)
 - [ ] Shell completions (bash, zsh, fish)
 - [ ] Homebrew formula
-- [ ] Delete command (cleanup old webhooks)
+- [x] Delete command (cleanup old webhooks)
 - [ ] Webhook filtering by date range
 
 **Ship: v0.2.0** — *"Production ready for daily use"*

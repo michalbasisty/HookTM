@@ -9,13 +9,16 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.22', '1.23']
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: ${{ matrix.go-version }}
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -28,11 +31,17 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
+    - name: Verify dependencies
+      run: go mod verify
+
     - name: Build
       run: go build -v ./cmd/hooktm
 
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out ./...
+
+    - name: Run benchmarks
+      run: go test -bench=. -benchtime=100ms ./internal/store
 
     - name: Upload coverage
       uses: codecov/codecov-action@v3
@@ -48,10 +57,40 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.22'
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Check formatting
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "Please run 'go fmt ./...' to format your code"
+          gofmt -s -l .
+          exit 1
+        fi
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v3
       with:
         version: latest
         args: --timeout=5m
+
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Build
+      run: go build -v ./cmd/hooktm
+
+    - name: Test binary
+      run: ./hooktm --version

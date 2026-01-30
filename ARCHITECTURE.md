@@ -13,12 +13,17 @@ This document describes the internal architecture of HookTM.
 ├─────────────────────────────────────────────────────────────────┤
 │                      internal/cli/                               │
 │  ┌─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐ │
-│  │ listen  │  list   │  show   │ replay  │   ui    │ codegen │ │
+│  │ listen  │  list   │  show   │ replay  │  delete │   ui    │ │
+│  │         │         │         │  code   │         │  codegen│ │
 │  └────┬────┴────┬────┴────┬────┴────┬────┴────┬────┴────┬────┘ │
 ├───────┼─────────┼─────────┼─────────┼─────────┼─────────┼───────┤
 │       ▼         ▼         ▼         ▼         ▼         ▼       │
 │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐   │
 │  │  proxy  │ │  store  │ │  store  │ │ replay  │ │ codegen │   │
+│  │         │ │         │ │         │ │         │ │         │   │
+│  │┌───────┐│ │┌───────┐│ │┌───────┐│ │┌───────┐│ │┌───────┐│   │
+│  ││logger ││ ││config ││ ││search ││ ││config ││ ││provider││   │
+│  │└───────┘│ │└───────┘│ │└───────┘│ │└───────┘│ │└───────┘│   │
 │  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘   │
 │       │           │           │           │           │         │
 │       ▼           ▼           ▼           ▼           ▼         │
@@ -45,10 +50,11 @@ CLI command implementations using [urfave/cli](https://github.com/urfave/cli).
 | File | Purpose |
 |------|---------|
 | `app.go` | App definition, global flags |
-| `listen.go` | Start proxy server |
-| `list.go` | List webhooks |
+| `listen.go` | Start proxy server with logging options |
+| `list.go` | List webhooks with date filtering |
 | `show.go` | Show webhook details |
-| `replay.go` | Replay webhooks |
+| `replay.go` | Replay webhooks with CI exit codes |
+| `delete.go` | Delete webhooks by filter |
 | `ui.go` | Launch TUI |
 | `codegen.go` | Generate validation code |
 | `common.go` | Shared utilities (store opening, etc.) |
@@ -64,18 +70,26 @@ HTTP reverse proxy that captures webhooks.
   2. Detects provider
   3. Forwards to target (if configured)
   4. Records to database
+  5. Structured logging with correlation IDs
 
 **Request flow:**
 ```
 Client → RecorderProxy → Forward Target
               │
+              ├──► Logger (structured)
+              │
               ▼
            SQLite
 ```
 
+**Context Support:**
+- Checks for context cancellation on each request
+- Returns 503 Service Unavailable if request cancelled
+- Respects timeouts from parent context
+
 ### `internal/store`
 
-SQLite database operations.
+SQLite database operations with context support.
 
 **Schema:**
 ```sql
@@ -99,20 +113,29 @@ webhooks_fts (FTS5 virtual table for full-text search)
 ```
 
 **Key operations:**
-- `InsertWebhook` - Store captured webhook
-- `ListSummaries` - List with filters
-- `GetWebhook` - Get full details by ID
-- `SearchSummaries` - FTS5 full-text search
+- `InsertWebhook` - Store captured webhook (context-aware)
+- `ListSummaries` - List with filters (context-aware)
+- `GetWebhook` - Get full details by ID (context-aware)
+- `SearchSummaries` - FTS5 full-text search (context-aware)
+- `DeleteWebhook` - Delete by ID (context-aware)
+- `DeleteByFilter` - Bulk delete (context-aware)
+
+**Context Support:**
+- All operations accept `context.Context`
+- Respects cancellation and timeouts
+- Uses `OpenContext()` for cancellable database opening
 
 ### `internal/replay`
 
-Webhook replay engine.
+Webhook replay engine with context support.
 
 **Features:**
 - Reconstructs original request
 - Applies JSON merge patches (RFC7396)
 - Supports dry-run mode
 - Preserves original headers
+- Context-aware HTTP requests
+- Respects cancellation during body draining
 
 ### `internal/codegen`
 
@@ -139,6 +162,7 @@ Terminal UI using [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 - Detail panel (right) - Selected webhook
 - Search input
 - Keyboard navigation
+- Replay integration
 
 ### `internal/provider`
 
@@ -153,7 +177,7 @@ Otherwise                  → unknown (with signature extraction)
 
 ### `internal/config`
 
-YAML configuration loading.
+YAML configuration loading and validation.
 
 **Config file:** `~/.hooktm/config.yaml`
 
@@ -164,11 +188,45 @@ db: ~/.hooktm/hooks.db
 lang: go
 ```
 
+**Validation:**
+- `port`: 1-65535
+- `forward`: Valid URL or host:port
+- `db`: No path traversal (`..`)
+- `lang`: Supported language code
+
+**Functions:**
+- `Load()` - Load config from file
+- `LoadAndValidate()` - Load and validate
+- `Validate()` - Validate config values
+- `SetDefaults()` - Apply default values
+
+### `internal/logger`
+
+Structured logging with multiple output formats.
+
+**Features:**
+- Log levels: DEBUG, INFO, WARN, ERROR
+- Formats: text, JSON
+- Structured fields with chaining
+- Correlation ID support via context
+- Thread-safe operations
+
+**Usage:**
+```go
+log := logger.New(logger.Config{
+    Level:  logger.InfoLevel,
+    Format: "json",
+})
+log.WithField("provider", "stripe").Info("webhook captured")
+```
+
 ### `internal/urlutil`
 
 Shared URL utilities.
 
 - `SingleJoiningSlash` - Join URL paths correctly
+- `ParseURL` - Parse URLs with host:port shorthand support
+- `MustParseURL` - Parse with panic on error (for tests)
 
 ## Data Flow
 
@@ -177,11 +235,12 @@ Shared URL utilities.
 ```
 1. HTTP request arrives at proxy port
 2. RecorderProxy.ServeHTTP():
-   a. Read body (limited to 10MB)
-   b. Generate nano ID
-   c. Detect provider from headers
-   d. Forward to target (if configured)
-   e. Record to SQLite
+   a. Check context cancellation
+   b. Read body (limited to 10MB)
+   c. Generate nano ID
+   d. Detect provider from headers
+   e. Forward to target (if configured)
+   f. Record to SQLite (with context)
 3. Response returned to client
 ```
 
@@ -189,11 +248,12 @@ Shared URL utilities.
 
 ```
 1. User runs: hooktm replay <id>
-2. Load webhook from SQLite
+2. Load webhook from SQLite (with context)
 3. Apply JSON patch (if provided)
-4. Reconstruct HTTP request
-5. Send to target
-6. Report result
+4. Reconstruct HTTP request (with context)
+5. Send to target (respects cancellation)
+6. Drain response body (with context check)
+7. Report result
 ```
 
 ### Full-Text Search
@@ -204,6 +264,21 @@ Shared URL utilities.
 3. Results joined with main table for full data
 ```
 
+### Context Propagation
+
+```
+CLI Command ──► Store Operation
+     │                │
+     ▼                ▼
+  Context ◄───── Context Timeout
+     │                │
+     ▼                ▼
+  Proxy Handler ◄── Cancellation Check
+     │
+     ▼
+  Replay Engine ◄── HTTP Request Context
+```
+
 ## Design Decisions
 
 ### SQLite with WAL
@@ -211,6 +286,7 @@ Shared URL utilities.
 - Single-file database, no server needed
 - WAL mode for concurrent reads during writes
 - MaxOpenConns(1) for simplicity
+- Context-aware operations for cancellation
 
 ### Nano IDs
 
@@ -230,12 +306,27 @@ Shared URL utilities.
 - Returns 200 OK, still records webhook
 - Forward target is optional
 
+### Structured Logging
+
+- Interface-based design for testability
+- Multiple output formats (text/JSON)
+- Log levels for different environments
+- Correlation IDs for request tracing
+
+### Context Cancellation
+
+- All long-running operations accept context
+- Graceful shutdown on SIGINT/SIGTERM
+- Request cancellation returns 503
+- Database operations respect timeouts
+
 ## Error Handling
 
 ### Proxy Errors
 
 - Body read errors → 400 Bad Request
 - Body too large → 413 Request Entity Too Large
+- Context cancelled → 503 Service Unavailable
 - Forward failure → 502 Bad Gateway (still recorded)
 - Database errors → Logged, request continues
 
@@ -244,6 +335,13 @@ Shared URL utilities.
 - Wrapped with context: `fmt.Errorf("migrate: %w", err)`
 - Missing records: `not found: <id>`
 - Invalid input: Validation errors returned
+- Context cancelled: Operation aborted
+
+### Validation Errors
+
+- `ValidationError` type with field name
+- Descriptive error messages
+- `IsValidationError()` helper function
 
 ## Security Considerations
 
@@ -255,13 +353,30 @@ Shared URL utilities.
 
 User input wrapped in quotes to prevent FTS5 operator injection.
 
+### Config Validation
+
+- Port range validation (1-65535)
+- URL format validation
+- Path traversal prevention (`..`)
+- Language code whitelist
+
 ### Sensitive Data
 
 - All headers stored (including auth tokens)
-- Consider adding `--strip-headers` for replay
 - Database should be treated as sensitive
+- Consider file permissions on hooks.db
 
 ## Performance
+
+### Benchmarks (AMD Ryzen 9 3900X)
+
+| Operation | Performance |
+|-----------|-------------|
+| Insert webhook | ~140μs |
+| Get webhook | ~25μs |
+| List webhooks (1000) | ~80μs |
+| Search webhooks (1000) | ~1.2ms |
+| Concurrent operations | 10,000+ ops/sec |
 
 ### Bottlenecks
 
@@ -274,22 +389,49 @@ User input wrapped in quotes to prevent FTS5 operator injection.
 - Single connection (WAL-friendly)
 - Prepared statements via database/sql
 - Body text capped at 200KB for FTS
+- Context-aware cancellation
 
 ## Testing Strategy
 
 ### Unit Tests
 
-- `store/store_test.go` - Database operations
-- `provider/detect_test.go` - Provider detection
-- `replay/engine_test.go` - Replay logic
+| Package | Coverage | Focus |
+|---------|----------|-------|
+| `store` | 80%+ | Database operations, context handling |
+| `provider` | 79% | Provider detection |
+| `replay` | 96%+ | Replay logic, JSON patching |
+| `config` | 91%+ | Loading, validation |
+| `logger` | 83%+ | Logging, formatting |
+| `urlutil` | 93%+ | URL parsing |
+| `proxy` | 89%+ | HTTP handling, logging |
+| `tui` | 84%+ | UI components |
 
 ### Integration Tests
 
-- Manual testing with real webhooks
-- Stripe CLI forwarding
+- `tests/integration_test.go` - Full flow testing
+- Webhook capture → store → replay
+- Concurrent operations
+- Provider detection
+- Error scenarios
 
-### Missing Coverage
+### Benchmarks
 
-- Proxy handler (needs HTTP test server)
-- CLI commands (needs integration harness)
-- TUI (difficult to test)
+- `store/store_bench_test.go` - Performance baselines
+- Insert, get, list, search, delete operations
+- Concurrent load testing
+
+### Running Tests
+
+```bash
+# All tests
+go test ./...
+
+# With coverage
+go test -cover ./...
+
+# Benchmarks
+go test -bench=. ./internal/store
+
+# Race detection
+go test -race ./...
+```

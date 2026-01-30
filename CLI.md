@@ -25,6 +25,8 @@ hooktm listen <port> [flags]
 
 **Flags:**
 - `--forward` - Forward requests to a URL (e.g., `localhost:3000`)
+- `--log-level` - Log level: `debug`, `info`, `warn`, `error` (default: `info`)
+- `--log-format` - Log format: `text`, `json` (default: `text`)
 
 **Examples:**
 ```bash
@@ -36,6 +38,15 @@ hooktm listen 8080 --forward localhost:3000
 
 # Proxy to full URL
 hooktm listen 8080 --forward http://api.example.com/webhook
+
+# With debug logging
+hooktm listen 8080 --log-level debug
+
+# With JSON logging for production
+hooktm listen 8080 --log-format json
+
+# Combined options
+hooktm listen 8080 --forward localhost:3000 --log-level warn --log-format json
 ```
 
 ---

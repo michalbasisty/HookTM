@@ -63,7 +63,7 @@ func BenchmarkInsertWebhook_WithLargeBody(b *testing.B) {
 		Path:     "/webhook",
 		Headers:  map[string][]string{"Content-Type": {"application/json"}},
 		Body:     largeBody,
-		BodyText: string(largeBody[:200000]), // Only index first 200KB
+		BodyText: string(largeBody),
 		Provider: "stripe",
 	}
 	

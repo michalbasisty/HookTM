@@ -28,7 +28,14 @@ type Store struct {
 	db   *sql.DB
 }
 
+// Open opens a database at the given path.
+// It uses context.Background() for the migration. Use OpenContext for cancellation support.
 func Open(path string) (*Store, error) {
+	return OpenContext(context.Background(), path)
+}
+
+// OpenContext opens a database with context support for cancellation during migration.
+func OpenContext(ctx context.Context, path string) (*Store, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, fmt.Errorf("empty db path")
@@ -49,7 +56,7 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1) // keep it simple & WAL-friendly for MVP
 	s := &Store{path: path, db: db}
-	if err := s.migrate(context.Background()); err != nil {
+	if err := s.migrate(ctx); err != nil {
 		_ = db.Close()
 		return nil, err
 	}

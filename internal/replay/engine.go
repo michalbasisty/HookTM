@@ -83,11 +83,31 @@ func (e *Engine) ReplayByID(ctx context.Context, id string, targetBase string, m
 	}
 
 	// Drain and close the response body to enable connection reuse.
-	// We log any errors but don't fail the replay for body read errors.
+	// Check for context cancellation while draining.
 	defer resp.Body.Close()
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		// Log the error but don't fail - we got a response, which is what matters
-		// This could be a timeout reading a large body, but the status code is still valid
+	done := make(chan struct{})
+	var drainErr error
+	go func() {
+		_, drainErr = io.Copy(io.Discard, resp.Body)
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		// Context cancelled while draining, but we still have a valid response
+		return Result{
+			WebhookID:  id,
+			URL:        u.String(),
+			Sent:       true,
+			StatusCode: resp.StatusCode,
+			DurationMS: time.Since(start).Milliseconds(),
+		}, nil
+	case <-done:
+		// Drain completed
+		if drainErr != nil {
+			// Log but don't fail - we got a response, which is what matters
+			// This could be a timeout reading a large body
+		}
 	}
 
 	return Result{

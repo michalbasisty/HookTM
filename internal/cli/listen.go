@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"hooktm/internal/logger"
 	"hooktm/internal/proxy"
 	"hooktm/internal/urlutil"
 
@@ -37,6 +38,16 @@ Examples:
 			&cli.StringFlag{
 				Name:  "forward",
 				Usage: "Forward requests to this URL (e.g., localhost:3000 or http://host:port)",
+			},
+			&cli.StringFlag{
+				Name:  "log-level",
+				Usage: "Log level: debug, info, warn, error",
+				Value: "info",
+			},
+			&cli.StringFlag{
+				Name:  "log-format",
+				Usage: "Log format: text or json",
+				Value: "text",
 			},
 		},
 		Action: runListen,
@@ -78,11 +89,22 @@ func runListen(c *cli.Context) error {
 		}
 	}
 
+	// Setup logger
+	logLevel, err := logger.ParseLevel(c.String("log-level"))
+	if err != nil {
+		return fmt.Errorf("invalid log level: %w", err)
+	}
+	log := logger.New(logger.Config{
+		Level:  logLevel,
+		Format: c.String("log-format"),
+		Output: c.App.ErrWriter,
+	})
+
 	// Start server
 	addr := net.JoinHostPort("", port)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           proxy.NewRecorderProxy(targetURL, s, nil),
+		Handler:           proxy.NewRecorderProxy(targetURL, s, log),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

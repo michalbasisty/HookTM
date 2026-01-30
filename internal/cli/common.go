@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,7 +13,13 @@ import (
 )
 
 // openStoreFromContext opens the database from CLI context.
+// It uses c.Context() for cancellation support during database operations.
 func openStoreFromContext(c *cli.Context) (*store.Store, *config.Config, error) {
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	
 	cfgPath := c.String("config")
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -27,7 +34,7 @@ func openStoreFromContext(c *cli.Context) (*store.Store, *config.Config, error) 
 		dbPath = defaultDBPath()
 	}
 
-	s, err := store.Open(dbPath)
+	s, err := store.OpenContext(ctx, dbPath)
 	if err != nil {
 		return nil, nil, err
 	}

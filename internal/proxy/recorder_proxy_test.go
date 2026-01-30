@@ -21,7 +21,7 @@ func TestRecorderProxy_RecordOnly(t *testing.T) {
 	}
 	defer s.Close()
 
-	proxy := NewRecorderProxy(nil, s)
+	proxy := NewRecorderProxy(nil, s, nil)
 
 	// Create test request
 	body := []byte(`{"test":"data"}`)
@@ -94,7 +94,7 @@ func TestRecorderProxy_WithForward(t *testing.T) {
 	defer s.Close()
 
 	targetURL, _ := url.Parse(target.URL)
-	proxy := NewRecorderProxy(targetURL, s)
+	proxy := NewRecorderProxy(targetURL, s, nil)
 
 	body := []byte(`{"test":"data"}`)
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/test", bytes.NewReader(body))
@@ -132,7 +132,7 @@ func TestRecorderProxy_BodyTooLarge(t *testing.T) {
 	}
 	defer s.Close()
 
-	proxy := NewRecorderProxy(nil, s)
+	proxy := NewRecorderProxy(nil, s, nil)
 
 	// Create a body larger than MaxRequestBodySize
 	largeBody := make([]byte, MaxRequestBodySize+1)
@@ -165,7 +165,7 @@ func TestRecorderProxy_ForwardError(t *testing.T) {
 
 	// Use a URL that will cause connection refused
 	targetURL, _ := url.Parse("http://localhost:1")
-	proxy := NewRecorderProxy(targetURL, s)
+	proxy := NewRecorderProxy(targetURL, s, nil)
 
 	body := []byte(`{"test":"data"}`)
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/test", bytes.NewReader(body))
@@ -231,7 +231,7 @@ func TestRecorderProxy_ProviderDetection(t *testing.T) {
 			}
 			defer s.Close()
 
-			proxy := NewRecorderProxy(nil, s)
+			proxy := NewRecorderProxy(nil, s, nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(tt.body))
 			for k, v := range tt.headers {
@@ -275,7 +275,7 @@ func TestRecorderProxy_HopByHopHeaders(t *testing.T) {
 	defer s.Close()
 
 	targetURL, _ := url.Parse(target.URL)
-	proxy := NewRecorderProxy(targetURL, s)
+	proxy := NewRecorderProxy(targetURL, s, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(`{}`))
 	req.Header.Set("Connection", "keep-alive")
@@ -403,7 +403,7 @@ func TestRecorderProxy_ConcurrentRequests(t *testing.T) {
 	}
 	defer s.Close()
 
-	proxy := NewRecorderProxy(nil, s)
+	proxy := NewRecorderProxy(nil, s, nil)
 
 	// Send multiple concurrent requests
 	const numRequests = 10

@@ -3,12 +3,12 @@ package proxy
 import (
 	"bytes"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"hooktm/internal/logger"
 	"hooktm/internal/provider"
 	"hooktm/internal/store"
 	"hooktm/internal/urlutil"
@@ -27,13 +27,18 @@ type RecorderProxy struct {
 	target *url.URL
 	store  *store.Store
 	client *http.Client
+	log    logger.Logger
 }
 
-func NewRecorderProxy(target *url.URL, s *store.Store) *RecorderProxy {
+func NewRecorderProxy(target *url.URL, s *store.Store, log logger.Logger, nil) *RecorderProxy {
+	if log == nil {
+		log = logger.NopLogger{}
+	}
 	return &RecorderProxy{
 		target: target,
 		store:  s,
 		client: &http.Client{Timeout: 60 * time.Second},
+		log:    log,
 	}
 }
 
@@ -51,24 +56,24 @@ func (p *RecorderProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	limitedReader := io.LimitReader(r.Body, MaxRequestBodySize+1)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
-		log.Printf("[hooktm] failed to read request body: %v", err)
+		p.log.WithContext(ctx).Errorf("failed to read request body: %v", err)
 		http.Error(w, "failed to read request body", http.StatusBadRequest)
 		return
 	}
 	if err := r.Body.Close(); err != nil {
-		log.Printf("[hooktm] failed to close request body: %v", err)
+		p.log.WithContext(ctx).Warnf("failed to close request body: %v", err)
 	}
 
 	// Check if body exceeded limit.
 	if len(body) > MaxRequestBodySize {
-		log.Printf("[hooktm] request body too large: %d bytes", len(body))
+		p.log.WithContext(ctx).Warnf("request body too large: %d bytes", len(body))
 		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 		return
 	}
 
 	id, err := nanoid.New()
 	if err != nil {
-		log.Printf("[hooktm] failed to generate ID: %v", err)
+		p.log.WithContext(ctx).Errorf("failed to generate ID: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -82,7 +87,10 @@ func (p *RecorderProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p.target != nil {
 		statusCode, respMS, err = p.forward(w, r, body)
 		if err != nil {
-			log.Printf("[hooktm] forward failed: %v", err)
+			p.log.WithContext(ctx).WithFields(logger.Fields{
+			"error": err.Error(),
+			"target": p.target.String(),
+		}).Warn("forward failed")
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			sc := http.StatusBadGateway
 			statusCode = &sc
@@ -111,7 +119,7 @@ func (p *RecorderProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ResponseMS: respMS,
 		BodyText:   bodyText,
 	}); err != nil {
-		log.Printf("[hooktm] failed to store webhook: %v", err)
+		p.log.WithContext(ctx).Errorf("failed to store webhook: %v", err)
 	}
 }
 

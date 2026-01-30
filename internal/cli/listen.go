@@ -82,7 +82,7 @@ func runListen(c *cli.Context) error {
 	addr := net.JoinHostPort("", port)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           proxy.NewRecorderProxy(targetURL, s),
+		Handler:           proxy.NewRecorderProxy(targetURL, s, nil),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

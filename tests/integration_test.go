@@ -46,7 +46,7 @@ func TestFullFlow_CaptureAndReplay(t *testing.T) {
 	defer targetServer.Close()
 
 	// Step 1: Create proxy (record-only mode for simplicity)
-	recorder := proxy.NewRecorderProxy(nil, s)
+	recorder := proxy.NewRecorderProxy(nil, s, nil)
 
 	// Step 2: Send webhook to proxy
 	webhookBody := []byte(`{"event":"payment.succeeded","amount":5000,"currency":"usd"}`)
@@ -159,7 +159,7 @@ func TestFullFlow_CaptureWithForward(t *testing.T) {
 
 	// Create proxy with forward target
 	targetURL, _ := parseURL(userApp.URL)
-	recorder := proxy.NewRecorderProxy(targetURL, s)
+	recorder := proxy.NewRecorderProxy(targetURL, s, nil)
 
 	// Send webhook to proxy
 	webhookBody := []byte(`{"event":"user.created","user_id":"usr_123"}`)
@@ -211,7 +211,7 @@ func TestFullFlow_CaptureSearchReplay(t *testing.T) {
 	s, _ := store.Open(":memory:")
 	defer s.Close()
 
-	recorder := proxy.NewRecorderProxy(nil, s)
+	recorder := proxy.NewRecorderProxy(nil, s, nil)
 
 	// Capture multiple webhooks
 	webhooks := []struct {
@@ -273,7 +273,7 @@ func TestFullFlow_ReplayWithModification(t *testing.T) {
 	s, _ := store.Open(":memory:")
 	defer s.Close()
 
-	recorder := proxy.NewRecorderProxy(nil, s)
+	recorder := proxy.NewRecorderProxy(nil, s, nil)
 
 	// Capture webhook
 	originalBody := `{"amount":100,"currency":"usd","test_mode":true}`
@@ -325,7 +325,7 @@ func TestFullFlow_ConcurrentWebhooks(t *testing.T) {
 	s, _ := store.Open(":memory:")
 	defer s.Close()
 
-	recorder := proxy.NewRecorderProxy(nil, s)
+	recorder := proxy.NewRecorderProxy(nil, s, nil)
 
 	const numWebhooks = 50
 	var wg sync.WaitGroup
@@ -396,7 +396,7 @@ func TestFullFlow_TargetUnavailable(t *testing.T) {
 	s, _ := store.Open(":memory:")
 	defer s.Close()
 
-	recorder := proxy.NewRecorderProxy(nil, s)
+	recorder := proxy.NewRecorderProxy(nil, s, nil)
 
 	// Capture webhook
 	req := httptest.NewRequest(http.MethodPost, "/webhooks", strings.NewReader(`{}`))
@@ -437,7 +437,7 @@ func TestFullFlow_ProviderDetectionAndReplay(t *testing.T) {
 	s, _ := store.Open(":memory:")
 	defer s.Close()
 
-	recorder := proxy.NewRecorderProxy(nil, s)
+	recorder := proxy.NewRecorderProxy(nil, s, nil)
 
 	// Capture webhooks from different providers
 	providerTests := []struct {
@@ -536,7 +536,7 @@ func TestFullFlow_DeleteAfterReplay(t *testing.T) {
 	s, _ := store.Open(":memory:")
 	defer s.Close()
 
-	recorder := proxy.NewRecorderProxy(nil, s)
+	recorder := proxy.NewRecorderProxy(nil, s, nil)
 
 	// Capture
 	req := httptest.NewRequest(http.MethodPost, "/webhooks", strings.NewReader(`{}`))
@@ -588,7 +588,7 @@ func TestFullFlow_DryRunDoesNotAffectTarget(t *testing.T) {
 	s, _ := store.Open(":memory:")
 	defer s.Close()
 
-	recorder := proxy.NewRecorderProxy(nil, s)
+	recorder := proxy.NewRecorderProxy(nil, s, nil)
 
 	// Capture
 	req := httptest.NewRequest(http.MethodPost, "/webhooks", strings.NewReader(`{}`))
@@ -640,7 +640,7 @@ func TestFullFlow_LargePayload(t *testing.T) {
 	}
 	payload := fmt.Sprintf(`{"data":"%s","checksum":"%d"}`, string(largeData), len(largeData))
 
-	recorder := proxy.NewRecorderProxy(nil, s)
+	recorder := proxy.NewRecorderProxy(nil, s, nil)
 
 	// Capture
 	req := httptest.NewRequest(http.MethodPost, "/webhooks", strings.NewReader(payload))

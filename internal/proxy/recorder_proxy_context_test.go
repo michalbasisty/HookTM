@@ -18,7 +18,7 @@ func TestRecorderProxy_ContextCancellation(t *testing.T) {
 	}
 	defer s.Close()
 
-	proxy := NewRecorderProxy(nil, s)
+	proxy := NewRecorderProxy(nil, s, nil)
 
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -53,7 +53,7 @@ func TestRecorderProxy_ContextTimeout(t *testing.T) {
 	}
 	defer s.Close()
 
-	proxy := NewRecorderProxy(nil, s)
+	proxy := NewRecorderProxy(nil, s, nil)
 
 	// Create a context with very short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
@@ -81,7 +81,7 @@ func TestRecorderProxy_ContextPropagation(t *testing.T) {
 	}
 	defer s.Close()
 
-	proxy := NewRecorderProxy(nil, s)
+	proxy := NewRecorderProxy(nil, s, nil)
 
 	// Create request with normal context
 	ctx := context.WithValue(context.Background(), "test-key", "test-value")

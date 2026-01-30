@@ -523,11 +523,11 @@ func TestApplyMergePatchIfJSON(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "array body",
+			name:     "array body - RFC 7396 merge patch behavior",
 			headers:  map[string][]string{"Content-Type": {"application/json"}},
 			body:     []byte(`[1,2,3]`),
 			patch:    []byte(`{"0":99}`),
-			expected: []byte(`[99,2,3]`),
+			expected: []byte(`{"0":99}`), // Arrays are replaced, not merged per RFC 7396
 			wantErr:  false,
 		},
 	}

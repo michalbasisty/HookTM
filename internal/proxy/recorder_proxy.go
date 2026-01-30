@@ -38,7 +38,14 @@ func NewRecorderProxy(target *url.URL, s *store.Store) *RecorderProxy {
 }
 
 func (p *RecorderProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	now := time.Now()
+
+	// Check for early cancellation before processing.
+	if err := ctx.Err(); err != nil {
+		http.Error(w, "request cancelled", http.StatusServiceUnavailable)
+		return
+	}
 
 	// Limit request body size to prevent memory exhaustion.
 	limitedReader := io.LimitReader(r.Body, MaxRequestBodySize+1)
@@ -89,7 +96,7 @@ func (p *RecorderProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		respMS = time.Since(now).Milliseconds()
 	}
 
-	if err := p.store.InsertWebhook(r.Context(), store.InsertParams{
+	if err := p.store.InsertWebhook(ctx, store.InsertParams{
 		ID:         id,
 		CreatedAt:  now.UnixMilli(),
 		Method:     r.Method,

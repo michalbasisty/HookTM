@@ -30,7 +30,7 @@ type RecorderProxy struct {
 	log    logger.Logger
 }
 
-func NewRecorderProxy(target *url.URL, s *store.Store, log logger.Logger, nil) *RecorderProxy {
+func NewRecorderProxy(target *url.URL, s *store.Store, log logger.Logger) *RecorderProxy {
 	if log == nil {
 		log = logger.NopLogger{}
 	}

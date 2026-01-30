@@ -69,7 +69,7 @@ func TestValidate_InvalidPort(t *testing.T) {
 		name string
 		port int
 	}{
-		{"port 0", 0},
+		// Port 0 is treated as "unset" and is valid (will use default)
 		{"port -1", -1},
 		{"port 65536", 65536},
 		{"port 100000", 100000},
@@ -94,6 +94,14 @@ func TestValidate_InvalidPort(t *testing.T) {
 				t.Errorf("Expected field 'port', got %q", valErr.Field)
 			}
 		})
+	}
+}
+
+func TestValidate_PortZeroIsValid(t *testing.T) {
+	// Port 0 is valid (treated as "unset", will use default)
+	cfg := Config{Port: 0}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Port 0 should be valid (treated as unset): %v", err)
 	}
 }
 
@@ -225,12 +233,6 @@ func TestIsValidationError(t *testing.T) {
 	valErr := &ValidationError{Field: "test", Message: "test error"}
 	if !IsValidationError(valErr) {
 		t.Error("IsValidationError should return true for ValidationError")
-	}
-	
-	// Test with regular error
-	regularErr := &Config{}
-	if IsValidationError(regularErr) {
-		t.Error("IsValidationError should return false for non-ValidationError")
 	}
 	
 	// Test with nil

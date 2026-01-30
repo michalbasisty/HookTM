@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -32,13 +33,17 @@ func TestOpenContext_Cancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Open should still succeed because migration is fast
-	// This mainly tests that the context is passed through
+	// Open should fail because the context is cancelled
 	s, err := OpenContext(ctx, ":memory:")
-	if err != nil {
-		t.Fatalf("OpenContext with cancelled context failed: %v", err)
+	if err == nil {
+		s.Close()
+		t.Fatal("Expected OpenContext to fail with cancelled context")
 	}
-	defer s.Close()
+	
+	// Verify it's a context error
+	if !strings.Contains(err.Error(), "context") {
+		t.Errorf("Expected context error, got: %v", err)
+	}
 }
 
 func TestInsertWebhook_ContextCancellation(t *testing.T) {

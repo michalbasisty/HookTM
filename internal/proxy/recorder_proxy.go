@@ -16,8 +16,12 @@ import (
 	nanoid "github.com/matoous/go-nanoid/v2"
 )
 
-// MaxRequestBodySize limits incoming request bodies to prevent memory exhaustion.
-const MaxRequestBodySize = 10 * 1024 * 1024 // 10 MB
+const (
+	// MaxRequestBodySize limits incoming request bodies to prevent memory exhaustion.
+	MaxRequestBodySize = 10 * 1024 * 1024 // 10 MB
+	// MaxBodyTextLength is the maximum length of body text to index for search.
+	MaxBodyTextLength = 200_000 // 200 KB
+)
 
 type RecorderProxy struct {
 	target *url.URL
@@ -175,9 +179,9 @@ func extractBodyText(contentType string, body []byte) string {
 	if len(body) == 0 {
 		return ""
 	}
-	if len(body) > 200_000 {
+	if len(body) > MaxBodyTextLength {
 		// cap for MVP; keep DB usable.
-		body = body[:200_000]
+		body = body[:MaxBodyTextLength]
 	}
 	ct := strings.ToLower(contentType)
 	switch {

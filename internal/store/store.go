@@ -14,6 +14,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const (
+	// DefaultLimit is the default number of results to return.
+	DefaultLimit = 20
+	// MaxLimit is the maximum number of results allowed.
+	MaxLimit = 500
+	// BusyTimeoutMs is the SQLite busy timeout in milliseconds.
+	BusyTimeoutMs = 5000
+)
+
 type Store struct {
 	path string
 	db   *sql.DB
@@ -27,12 +36,12 @@ func Open(path string) (*Store, error) {
 	var dsn string
 	if path == ":memory:" {
 		// WAL doesn't make sense for in-memory DB; use MEMORY journal.
-		dsn = "file::memory:?cache=shared&_pragma=foreign_keys(ON)&_pragma=journal_mode(MEMORY)&_pragma=busy_timeout(5000)"
+		dsn = fmt.Sprintf("file::memory:?cache=shared&_pragma=foreign_keys(ON)&_pragma=journal_mode(MEMORY)&_pragma=busy_timeout(%d)", BusyTimeoutMs)
 	} else {
 		if err := ensureDir(filepath.Dir(path)); err != nil {
 			return nil, err
 		}
-		dsn = "file:" + path + "?_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+		dsn = fmt.Sprintf("file:%s?_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(%d)", path, BusyTimeoutMs)
 	}
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -140,8 +149,8 @@ type ListFilter struct {
 
 func (s *Store) ListSummaries(ctx context.Context, f ListFilter) ([]WebhookSummary, error) {
 	limit := f.Limit
-	if limit <= 0 || limit > 500 {
-		limit = 20
+	if limit <= 0 || limit > MaxLimit {
+		limit = DefaultLimit
 	}
 	var (
 		wheres []string
@@ -250,8 +259,8 @@ func (s *Store) SearchSummaries(ctx context.Context, query string, limit int) ([
 	if query == "" {
 		return nil, fmt.Errorf("empty search query")
 	}
-	if limit <= 0 || limit > 500 {
-		limit = 20
+	if limit <= 0 || limit > MaxLimit {
+		limit = DefaultLimit
 	}
 	// Sanitize FTS5 query to prevent injection of special operators.
 	// Wrap each word in double quotes to treat as literal text.

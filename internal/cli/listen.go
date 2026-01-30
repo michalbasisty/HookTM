@@ -8,11 +8,13 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"hooktm/internal/proxy"
+	"hooktm/internal/urlutil"
 
 	"github.com/urfave/cli/v2"
 )
@@ -47,6 +49,10 @@ func runListen(c *cli.Context) error {
 		return err
 	}
 	port = strings.TrimSpace(port)
+
+	if err := validatePort(port); err != nil {
+		return err
+	}
 
 	s, cfg, err := openStoreFromContext(c)
 	if err != nil {
@@ -106,22 +112,27 @@ func runListen(c *cli.Context) error {
 }
 
 func parseForwardTarget(s string) (*url.URL, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil, fmt.Errorf("empty forward target")
-	}
-
-	// Allow host:port shorthand
-	if !strings.Contains(s, "://") && strings.Contains(s, ":") {
-		s = "http://" + s
-	}
-
-	u, err := url.Parse(s)
+	u, err := urlutil.ParseURL(s)
 	if err != nil {
-		return nil, err
-	}
-	if u.Scheme == "" || u.Host == "" {
-		return nil, fmt.Errorf("invalid forward target: %q", s)
+		if err.Error() == "empty URL" {
+			return nil, fmt.Errorf("empty forward target")
+		}
+		return nil, fmt.Errorf("invalid forward target: %w", err)
 	}
 	return u, nil
+}
+
+// validatePort validates that the port is a valid port number (1-65535).
+func validatePort(port string) error {
+	if port == "" {
+		return fmt.Errorf("port cannot be empty")
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil {
+		return fmt.Errorf("invalid port %q: must be a number", port)
+	}
+	if n < 1 || n > 65535 {
+		return fmt.Errorf("invalid port %d: must be between 1 and 65535", n)
+	}
+	return nil
 }

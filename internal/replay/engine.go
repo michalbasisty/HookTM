@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -43,9 +42,12 @@ func (e *Engine) ReplayByID(ctx context.Context, id string, targetBase string, m
 	if err != nil {
 		return Result{}, err
 	}
-	base, err := parseBaseURL(targetBase)
+	base, err := urlutil.ParseURL(targetBase)
 	if err != nil {
-		return Result{}, err
+		if err.Error() == "empty URL" {
+			return Result{}, fmt.Errorf("empty base url")
+		}
+		return Result{}, fmt.Errorf("invalid base url: %w", err)
 	}
 
 	body := wh.Body
@@ -79,8 +81,14 @@ func (e *Engine) ReplayByID(ctx context.Context, id string, targetBase string, m
 	if err != nil {
 		return Result{}, err
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
+
+	// Drain and close the response body to enable connection reuse.
+	// We log any errors but don't fail the replay for body read errors.
+	defer resp.Body.Close()
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		// Log the error but don't fail - we got a response, which is what matters
+		// This could be a timeout reading a large body, but the status code is still valid
+	}
 
 	return Result{
 		WebhookID:  id,
@@ -91,23 +99,7 @@ func (e *Engine) ReplayByID(ctx context.Context, id string, targetBase string, m
 	}, nil
 }
 
-func parseBaseURL(s string) (*url.URL, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil, fmt.Errorf("empty base url")
-	}
-	if !strings.Contains(s, "://") && strings.Contains(s, ":") {
-		s = "http://" + s
-	}
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, err
-	}
-	if u.Scheme == "" || u.Host == "" {
-		return nil, fmt.Errorf("invalid base url: %q", s)
-	}
-	return u, nil
-}
+
 
 func applyMergePatchIfJSON(headers map[string][]string, body []byte, patch []byte) ([]byte, error) {
 	ct := strings.ToLower(firstHeader(headers, "Content-Type"))

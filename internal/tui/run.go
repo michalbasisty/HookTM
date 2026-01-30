@@ -144,9 +144,9 @@ func (m model) loadListCmd(search string) tea.Cmd {
 			err  error
 		)
 		if strings.TrimSpace(search) != "" {
-			rows, err = st.SearchSummaries(ctx, search, 200)
+			rows, err = st.SearchSummaries(ctx, search, store.MaxLimit)
 		} else {
-			rows, err = st.ListSummaries(ctx, store.ListFilter{Limit: 200})
+			rows, err = st.ListSummaries(ctx, store.ListFilter{Limit: store.MaxLimit})
 		}
 		if err != nil {
 			return errMsg{err: err}
